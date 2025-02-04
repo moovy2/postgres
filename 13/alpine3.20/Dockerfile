@@ -1,8 +1,10 @@
-{{
-	def alpine_version:
-		env.variant | ltrimstr("alpine")
--}}
-FROM alpine:{{ alpine_version }}
+#
+# NOTE: THIS DOCKERFILE IS GENERATED VIA "apply-templates.sh"
+#
+# PLEASE DO NOT EDIT IT DIRECTLY.
+#
+
+FROM alpine:3.20
 
 # 70 is the standard uid/gid for "postgres" in Alpine
 # https://git.alpinelinux.org/aports/tree/main/postgresql-common/postgresql-common.pre-install?h=3.21-stable
@@ -42,9 +44,7 @@ RUN set -eux; \
 # verify that the binary works
 	gosu --version; \
 	gosu nobody true
-{{ if env.version | IN("13", "14", "15", "16") then ( -}}
 RUN set -eux; ln -svf gosu /usr/local/bin/su-exec; su-exec nobody true # backwards compatibility (removed in PostgreSQL 17+)
-{{ ) else "" end -}}
 
 # make the "en_US.UTF-8" locale so postgres will be utf-8 enabled by default
 # alpine doesn't require explicit locale-file generation
@@ -52,21 +52,13 @@ ENV LANG en_US.utf8
 
 RUN mkdir /docker-entrypoint-initdb.d
 
-ENV PG_MAJOR {{ env.version }}
-ENV PG_VERSION {{ .version }}
-ENV PG_SHA256 {{ .sha256 }}
+ENV PG_MAJOR 13
+ENV PG_VERSION 13.18
+ENV PG_SHA256 ceea92abee2a8c19408d278b68de6a78b6bd3dbb4fa2d653fa7ca745d666aab1
 
-{{
-	def llvmver:
-		if alpine_version | split(".") | map(tonumber) < [3, 21] then
-			"15"
-		else
-			"19"
-		end
--}}
 ENV DOCKER_PG_LLVM_DEPS \
-		llvm{{ llvmver }}-dev \
-		clang{{ llvmver }}
+		llvm15-dev \
+		clang15
 
 RUN set -eux; \
 	\
@@ -107,14 +99,6 @@ RUN set -eux; \
 		zlib-dev \
 # https://www.postgresql.org/docs/10/static/release-10.html#id-1.11.6.9.5.13
 		icu-dev \
-{{ if .major >= 14 then ( -}}
-# https://www.postgresql.org/docs/14/release-14.html#id-1.11.6.5.5.3.7
-		lz4-dev \
-{{ ) else "" end -}}
-{{ if .major >= 15 then ( -}}
-# https://www.postgresql.org/docs/15/release-15.html "--with-zstd to enable Zstandard builds"
-		zstd-dev \
-{{ ) else "" end -}}
 	; \
 	\
 	cd /usr/src/postgresql; \
@@ -129,9 +113,9 @@ RUN set -eux; \
 	wget -O config/config.sub 'https://git.savannah.gnu.org/cgit/config.git/plain/config.sub?id=7d3d27baf8107b630586c962c057e22149653deb'; \
 	\
 # https://git.alpinelinux.org/aports/tree/community/postgresql15/APKBUILD?h=3.21-stable&id=40544ade947bec1798edb0f749f4e967e842624b#n172
-	export LLVM_CONFIG="/usr/lib/llvm{{ llvmver }}/bin/llvm-config"; \
+	export LLVM_CONFIG="/usr/lib/llvm15/bin/llvm-config"; \
 # https://git.alpinelinux.org/aports/tree/community/postgresql15/APKBUILD?h=3.21-stable&id=40544ade947bec1798edb0f749f4e967e842624b#n177
-	export CLANG=clang-{{ llvmver }}; \
+	export CLANG=clang-15; \
 	\
 # configure options taken from:
 # https://anonscm.debian.org/cgit/pkg-postgresql/postgresql.git/tree/debian/rules?h=9.5
@@ -141,20 +125,13 @@ RUN set -eux; \
 # "/usr/src/postgresql/src/backend/access/common/tupconvert.c:105: undefined reference to `libintl_gettext'"
 #		--enable-nls \
 		--enable-integer-datetimes \
-{{ if .major <= 16 then ( -}}
-{{ # in 17: this option is reversed. you need to disable it -}}
 		--enable-thread-safety \
-{{ ) else "" end -}}
 		--enable-tap-tests \
 # skip debugging info -- we want tiny size instead
 #		--enable-debug \
 		--disable-rpath \
 		--with-uuid=e2fs \
-{{ # in 16: "configure: error: unrecognized options: --with-gnu-ld" -}}
-{{ # https://github.com/postgres/postgres/commit/9db49fc5bfdc0126be03f4b8986013e59d93b91d -}}
-{{ if .major <= 15 then ( -}}
 		--with-gnu-ld \
-{{ ) else "" end -}}
 		--with-pgport=5432 \
 		--with-system-tzdata=/usr/share/zoneinfo \
 		--prefix=/usr/local \
@@ -171,12 +148,6 @@ RUN set -eux; \
 		--with-libxslt \
 		--with-icu \
 		--with-llvm \
-{{ if .major >= 14 then ( -}}
-		--with-lz4 \
-{{ ) else "" end -}}
-{{ if .major >= 15 then ( -}}
-		--with-zstd \
-{{ ) else "" end -}}
 	; \
 	make -j "$(nproc)" world-bin; \
 	make install-world-bin; \
