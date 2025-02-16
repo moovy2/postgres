@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 declare -A aliases=(
-	[15]='latest'
+	[17]='latest'
 )
 
 self="$(basename "$BASH_SOURCE")"
@@ -44,17 +44,19 @@ dirCommit() {
 
 getArches() {
 	local repo="$1"; shift
-	local officialImagesUrl='https://github.com/docker-library/official-images/raw/master/library/'
+	local officialImagesBase="${BASHBREW_LIBRARY:-https://github.com/docker-library/official-images/raw/HEAD/library}/"
 
-	eval "declare -g -A parentRepoToArches=( $(
-		find -name 'Dockerfile' -exec awk '
+	local parentRepoToArchesStr
+	parentRepoToArchesStr="$(
+		find -name 'Dockerfile' -exec awk -v officialImagesBase="$officialImagesBase" '
 				toupper($1) == "FROM" && $2 !~ /^('"$repo"'|scratch|.*\/.*)(:|$)/ {
-					print "'"$officialImagesUrl"'" $2
+					printf "%s%s\n", officialImagesBase, $2
 				}
 			' '{}' + \
 			| sort -u \
-			| xargs bashbrew cat --format '[{{ .RepoName }}:{{ .TagName }}]="{{ join " " .TagEntry.Architectures }}"'
-	) )"
+			| xargs -r bashbrew cat --format '["{{ .RepoName }}:{{ .TagName }}"]="{{ join " " .TagEntry.Architectures }}"'
+	)"
+	eval "declare -g -A parentRepoToArches=( $parentRepoToArchesStr )"
 }
 getArches 'postgres'
 
@@ -76,9 +78,10 @@ join() {
 for version; do
 	export version
 
-	variants="$(jq -r '.[env.version].debianSuites + ["alpine"] | map(@sh) | join(" ")' versions.json)"
+	variants="$(jq -r '.[env.version].variants | map(@sh) | join(" ")' versions.json)"
 	eval "variants=( $variants )"
 
+	alpine="$(jq -r '.[env.version].alpine' versions.json)"
 	debian="$(jq -r '.[env.version].debian' versions.json)"
 
 	fullVersion="$(jq -r '.[env.version].version' versions.json)"
@@ -115,9 +118,8 @@ for version; do
 					"${variantAliases[@]}"
 				)
 				;;
-			alpine)
-				alpine="alpine${parent#*:}"
-				variantAliases+=( "${versionAliases[@]/%/-$alpine}" )
+			alpine"$alpine")
+				variantAliases+=( "${versionAliases[@]/%/-alpine}" )
 				variantAliases=( "${variantAliases[@]//latest-/}" )
 				;;
 		esac

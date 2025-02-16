@@ -1,4 +1,10 @@
-FROM debian:{{ env.variant }}-slim
+#
+# NOTE: THIS DOCKERFILE IS GENERATED VIA "apply-templates.sh"
+#
+# PLEASE DO NOT EDIT IT DIRECTLY.
+#
+
+FROM debian:bullseye-slim
 
 # explicitly set user/group IDs
 RUN set -eux; \
@@ -80,10 +86,10 @@ RUN set -ex; \
 	gpgconf --kill all; \
 	rm -rf "$GNUPGHOME"
 
-ENV PG_MAJOR {{ env.version }}
+ENV PG_MAJOR 17
 ENV PATH $PATH:/usr/lib/postgresql/$PG_MAJOR/bin
 
-ENV PG_VERSION {{ .[env.variant].version }}
+ENV PG_VERSION 17.3-3.pgdg110+1
 
 RUN set -ex; \
 	\
@@ -91,9 +97,9 @@ RUN set -ex; \
 	export PYTHONDONTWRITEBYTECODE=1; \
 	\
 	dpkgArch="$(dpkg --print-architecture)"; \
-	aptRepo="[ signed-by=/usr/local/share/keyrings/postgres.gpg.asc ] http://apt.postgresql.org/pub/repos/apt/ {{ env.variant }}-pgdg main $PG_MAJOR"; \
+	aptRepo="[ signed-by=/usr/local/share/keyrings/postgres.gpg.asc ] http://apt.postgresql.org/pub/repos/apt/ bullseye-pgdg main $PG_MAJOR"; \
 	case "$dpkgArch" in \
-		{{ .[env.variant].arches | join(" | ") }}) \
+		amd64 | arm64 | ppc64el | s390x) \
 # arches officialy built by upstream
 			echo "deb $aptRepo" > /etc/apt/sources.list.d/pgdg.list; \
 			apt-get update; \
@@ -130,10 +136,6 @@ RUN set -ex; \
 			apt-get build-dep -y postgresql-common pgdg-keyring; \
 			apt-get source --compile postgresql-common pgdg-keyring; \
 			_update_repo; \
-{{ if .major == 13 then ( -}}
-# we need DEBIAN_FRONTEND on postgresql-13 for slapd ("Please enter the password for the admin entry in your LDAP directory."); see https://bugs.debian.org/929417
-			DEBIAN_FRONTEND=noninteractive \
-{{ ) else "" end -}}
 			apt-get build-dep -y "postgresql-$PG_MAJOR=$PG_VERSION"; \
 			apt-get source --compile "postgresql-$PG_MAJOR=$PG_VERSION"; \
 			\
